@@ -1,0 +1,73 @@
+name: Export LaMa a ONNX
+
+on:
+  workflow_dispatch:
+    inputs:
+      sizes:
+        description: "Resoluciones a exportar (separadas por espacio)"
+        default: "1024 1536"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install omegaconf webdataset pytorch_lightning "kornia==0.5.0" onnx onnxruntime \
+            "albumentations==1.3.1" imgaug scikit-image scikit-learn easydict pandas \
+            "numpy==1.26.4" "opencv-python-headless==4.10.0.84"
+
+      - name: Clonar saicinpainting (Carve)
+        run: git clone --depth 1 https://github.com/Carve-Photos/lama carve-lama
+
+      - name: Stub de transforms IAA (no se usan en exportacion)
+        run: |
+          cat > carve-lama/saicinpainting/training/data/aug.py <<'EOF'
+      """Stub: transforms de entrenamiento IAA no se usan en la exportacion ONNX."""
+      from albumentations.core.transforms_interface import DualTransform
+
+
+      class IAAAffine2(DualTransform):
+          def __init__(self, *args, **kwargs):
+              super().__init__(p=1.0)
+
+
+      class IAAPerspective2(DualTransform):
+          def __init__(self, *args, **kwargs):
+              super().__init__(p=1.0)
+      EOF
+
+      - name: Descargar big-lama
+        run: |
+          curl -L -o big-lama.zip https://huggingface.co/smartywu/big-lama/resolve/main/big-lama.zip
+          python -c "import zipfile; zipfile.ZipFile('big-lama.zip').extractall('carve-lama')"
+
+      - name: Exportar ONNX
+        run: |
+          for s in ${{ github.event.inputs.sizes }}; do
+            python export_lama.py "$s" "lama_$s.onnx"
+          done
+
+      - name: Verificar modelos
+        run: |
+          python - <<'EOF'
+          import onnxruntime as ort
+          import glob
+          for p in sorted(glob.glob("lama_*.onnx")):
+              s = ort.InferenceSession(p, providers=["CPUExecutionProvider"])
+              print(p, "IN", s.get_inputs()[0].shape, "OUT", s.get_outputs()[0].shape)
+          EOF
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lama-onnx
+          path: lama_*.onnx
+          retention-days: 30
