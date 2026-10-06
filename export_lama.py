@@ -73,6 +73,7 @@ torch.onnx.export(
     export_params=True,
     do_constant_folding=True,
     opset_version=17,
+    dynamo=False,
     verbose=False,
 )
 print('OK:', out, f'({os.path.getsize(out)/1024/1024:.1f} MB)')
