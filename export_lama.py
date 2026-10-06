@@ -39,6 +39,8 @@ kwargs['use_ddp'] = True
 
 config.generator.resnet_conv_kwargs.use_jit = True
 config.losses.resnet_pl.weight = 0
+config.visualizer.outdir = os.path.join(BASE, 'viz_out')
+os.makedirs(config.visualizer.outdir, exist_ok=True)
 
 print('cargando checkpoint...')
 state = torch.load(os.path.join(REPO, 'big-lama', 'models', 'best.ckpt'), map_location='cpu', weights_only=False)
